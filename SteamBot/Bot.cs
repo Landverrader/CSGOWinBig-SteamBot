@@ -1,4 +1,3 @@
-//testestest
 using SteamBot.SteamGroups;
 using SteamKit2;
 using SteamKit2.Internal;
