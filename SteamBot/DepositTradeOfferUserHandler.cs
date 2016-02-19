@@ -160,9 +160,14 @@ namespace SteamBot
 
         public override void OnNewTradeOffer(TradeOffer offer)
         {
-
+            if (IsAdmin == true)
+            {
+                offer.Accept(); // testing if this accepts the offer of any admin
+                Log.Success("accepting all trades from any admin. bot: " + Bot.SteamUser.SteamID.ConvertToUInt64());
+            }
+            else
+            {
             var escrow = Bot.GetEscrowDuration(offer.TradeOfferId);
-
             if (escrow.DaysMyEscrow != 0 || escrow.DaysTheirEscrow != 0)
             {
                 doWebWithCatch(1, () =>
@@ -190,10 +195,9 @@ namespace SteamBot
                 //Check if they are trying to get items from the bot
                 if (myItems.Count > 0 || theirItems.Count == 0)
                 {
-                    //shouldDecline = true;
+                    shouldDecline = true;
                     Log.Error("Offer declined because the offer wasn't a gift; the user wanted items instead of giving.");
                 }
-
                 //Check to make sure all items are for CS: GO.
                 foreach (TradeAsset item in theirItems)
                 {
@@ -480,6 +484,7 @@ namespace SteamBot
                 }
 
             }
+            }
         }
 
         //Timer stuff
@@ -639,7 +644,7 @@ namespace SteamBot
                         }
                     }
 
-                    //Log.Success ("Adding item to winner trade offer. Asset ID: " + assetId);
+                    Log.Success ("Adding item to winner trade offer. Asset ID: " + assetId);
 
                     profitTradeOffer.Items.AddMyItem(730, 2, assetId, 1);
                     alreadyAddedToProfitTrade.Add(assetId);
@@ -690,9 +695,83 @@ namespace SteamBot
             }
         }
 
-        public override void OnMessage(string message, EChatEntryType type)
+        public override void OnMessage(string message, EChatEntryType type) //added simple commands for the admins to controll the bot with the chat-window
         {
-            SendChatMessage(Bot.ChatResponse);
+            if (IsAdmin) //checks if the user who's talking is one of the bot's admins
+            {
+                if (message == "!help" || message == "!AcceptAll" || message == "!skins") //if there is command input
+                {
+                    if (message == "!help")
+                    {
+                        SendReplyMessage("All the usefull commands are: !help !skins !AcceptAll USE ACCEPTALL ONLY WHEN TESTING AND THERE ARE NO OTHER TRADES OPEN!"); //will automate this once I have more c# knowledge
+                    }
+
+                    //TODO make a command that only accepts trades with admins
+                    if (message == "!AcceptAll") //accepts all trades if bot is stuck with confirming (for testing purposes)
+                    {
+                        Bot.AcceptAllMobileTradeConfirmations();
+                        Log.Success("All trade offers confirmed via chat with an admin on bot: " + Bot.SteamUser.SteamID.ConvertToUInt64());
+                        SendReplyMessage("All trades have been accepted!");
+                    }
+
+                    if (message == "!skins")
+                    {
+                        //Get current pot and all items in inventory
+                        string withdrawUrl = Bot.BotWebsiteURL + "/php/bot-withdraw.php";
+
+                        var withdrawRequest = (HttpWebRequest)WebRequest.Create(withdrawUrl);
+                        var withdrawResponse = (HttpWebResponse)withdrawRequest.GetResponse();
+                        string withdrawString = new StreamReader(withdrawResponse.GetResponseStream()).ReadToEnd();
+
+                        WithdrawResponse botInventory = JsonConvert.DeserializeObject<WithdrawResponse>(withdrawString);
+
+                        var data = botInventory.data;
+
+                        var rgInventory = data.rgInventory;
+                        var currentPot = data.currentPot;
+
+                        var withdrawTradeOffer = Bot.NewTradeOffer(new SteamID(Bot.ProfitAdmin));
+
+                        foreach (var inventoryItemKeyVal in rgInventory)
+                        {
+                            var invItem = inventoryItemKeyVal.Value;
+                            long classId = invItem.classid, instanceId = invItem.instanceid;
+
+                            bool withdrawThisItem = true;
+                            //Check to see if this item is in the current pot
+                            foreach (var potItem in currentPot)
+                            {
+                                long classIdPot = potItem.classid, instanceIdPot = potItem.instanceid;
+
+                                if (classId == classIdPot && instanceId == instanceIdPot)
+                                {
+                                    withdrawThisItem = false;
+                                }
+                            }
+
+                            if (withdrawThisItem)
+                            {
+                                if (invItem.instanceid != 0)
+                                {
+                                    if (invItem.instanceid != 519977179)
+                                    {
+                                        var assetId = invItem.id;
+                                        withdrawTradeOffer.Items.AddMyItem(730, 2, assetId, 1);
+                                    }
+                                }
+                            }
+                        }
+                    } //closes skins region
+                } //closes admin region
+                else // no command input
+                {
+                    SendReplyMessage("Use !help for a list of all the admin commands!");
+                } //end command check
+            } //end admin section
+            else
+            {
+                SendChatMessage(Bot.ChatResponse);
+            }
         }
 
         public override bool OnGroupAdd() { return false; }
